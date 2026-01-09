@@ -10,6 +10,12 @@ datasource db {
 // Better Auth Models
 // --------------------------------------------------------
 
+enum SubscriptionTier {
+  DISCOVER
+  HOBBIST
+  PRO
+}
+
 model User {
   id            String    @id
   name          String
@@ -20,6 +26,12 @@ model User {
   updatedAt     DateTime
   sessions      Session[]
   accounts      Account[]
+
+  // Subscription & Credits
+  tier               SubscriptionTier @default(DISCOVER)
+  tokenBalance       Int              @default(0)
+  subscriptionId     String?
+  subscriptionStatus String?
 
   // App Relations
   projects Project[]

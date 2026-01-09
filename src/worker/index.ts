@@ -42,18 +42,21 @@ const SpecSchema = z.object({
 		.describe('Array of specification files. One file per specification')
 });
 
-async function generateSpec(prompt: string): Promise<string> {
-	// 1. Check for Mock Mode
+interface GenerateResult {
+    content: string;
+    usage: { promptTokens: number; completionTokens: number; totalTokens: number };
+}
+
+async function generateSpec(prompt: string): Promise<GenerateResult> {
 	// 1. Check for Mock Mode
 	if (process.env.MOCK_LLM === 'true' || process.env.NODE_ENV === 'test') {
 		console.log('🤖 using MOCK LLM response');
-		await new Promise((r) => setTimeout(r, 1000)); // Simulate slight delay
+		await new Promise((r) => setTimeout(r, 1000)); // Simulate delay
 		const mockObj = {
 			files: [
 				{
 					name: '0-MainContext.md',
-					content:
-						'# Main Context\n\n## Ubiquitous Language\n- **Project**: The core entity.\n\n## Hexagonal Architecture\n- Domain\n- Infra\n- App'
+					content: '# Main Context\n\n## Ubiquitous Language\n- **Project**: The core entity.'
 				},
 				{
 					name: '1-Features.md',
@@ -61,12 +64,14 @@ async function generateSpec(prompt: string): Promise<string> {
 				},
 				{
 					name: '2-Feature1-MVP.md',
-					content:
-						'# Feature 1: MVP\n\n## DDD Analysis\n- **Aggregate**: Project\n- **Entity**: Spec\n\n## Testing\n- Unit tests for domain logic.'
+					content: '# Feature 1: MVP\n\n## DDD Analysis\n- **Aggregate**: Project'
 				}
 			]
 		};
-		return JSON.stringify(mockObj.files);
+		return {
+            content: JSON.stringify(mockObj.files),
+            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        };
 	}
 
 	const apiKey = process.env.OPENROUTER_API_KEY;
@@ -88,8 +93,15 @@ async function generateSpec(prompt: string): Promise<string> {
 			prompt: prompt
 		});
 
-		// The result.object is typed based on Schema
-		return JSON.stringify(result.object.files);
+        const usage = result.usage;
+		return {
+            content: JSON.stringify(result.object.files),
+            usage: { 
+                promptTokens: usage.promptTokens || 0, 
+                completionTokens: usage.completionTokens || 0, 
+                totalTokens: usage.totalTokens || 0
+            }
+        };
 	} catch (error) {
 		console.error('SDK Generation Error:', error);
 		throw error;
@@ -105,6 +117,29 @@ async function processMessage(message: any) {
 
 	try {
 		console.log(`   Project: ${projectId}, Spec: ${specId}`);
+
+        // [NEW] 0. Check User Balance & Project ownership
+        const project = await prisma.project.findUnique({
+             where: { id: projectId },
+             include: { user: true }
+        });
+
+        if (!project || !project.user) {
+             console.error('❌ Project or User not found');
+             return;
+        }
+
+        const user = project.user;
+
+        // Balance Check for Paid Tiers
+        if (user.tier !== 'DISCOVER' && user.tokenBalance <= 0) {
+             // Mark spec as FAILED with specific reason?
+             // Currently SpecStatus doesn't have reasons.
+             console.error('❌ Insufficient tokens for user', user.id);
+             // We should probably update the spec to FAILED.
+             throw new Error('Insufficient tokens');
+        }
+
 
 		// 1. Update Status to Generating
 		const existingSpec = await specRepo.findLatestByProjectId(projectId);
@@ -181,8 +216,17 @@ async function processMessage(message: any) {
 
 		// 3. Generate Content
 		console.log('   Generating content...');
-		const jsonContent = await generateSpec(prompt); // Returns stringified JSON array of files
-		console.log('   ✅ Content generated (' + jsonContent.length + ' bytes)');
+		const { content: jsonContent, usage } = await generateSpec(prompt); // [MODIFIED] Destructure result
+		console.log('   ✅ Content generated (' + jsonContent.length + ' bytes). Usage:', usage);
+
+        // [NEW] Deduct Tokens
+        if (usage.totalTokens > 0) {
+             await prisma.user.update({
+                 where: { id: user.id },
+                 data: { tokenBalance: { decrement: usage.totalTokens } }
+             });
+             console.log(`   💸 Deducted ${usage.totalTokens} tokens from User ${user.id}`);
+        }
 
 		// 4. Save Completed
 		const completedSpec = SpecVersion.rehydrate(

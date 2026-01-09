@@ -1,17 +1,17 @@
 <script lang="ts">
-    import { invalidateAll } from '$app/navigation';
+    import { goto, invalidateAll } from '$app/navigation';
     import { page } from '$app/state';
     import JSZip from 'jszip';
     import { marked } from 'marked';
     import { onMount } from 'svelte';
-    
+
     let { data } = $props();
     let selectedSpecId = $state(data.specs[0]?.id || null);
     let selectedFileName = $state<string | null>(null);
 
     let selectedSpec = $derived(data.specs.find((s) => s.id === selectedSpecId));
 
-    type ParsedContent = 
+    type ParsedContent =
         | { type: 'multi'; files: { name: string; content: string }[] }
         | { type: 'single'; content: string }
         | null;
@@ -61,8 +61,14 @@
 
     async function downloadSpec(spec: any, event: MouseEvent) {
         event.stopPropagation();
+
+        if (data.user.tier === 'DISCOVER') {
+            goto('/pricing');
+            return;
+        }
+
         const zip = new JSZip();
-        
+
         try {
             if (spec.content.trim().startsWith('[')) {
                 const files = JSON.parse(spec.content);
@@ -76,7 +82,7 @@
             } else {
                 zip.file('spec.md', spec.content);
             }
-            
+
             const content = await zip.generateAsync({ type: 'blob' });
             const url = window.URL.createObjectURL(content);
             const a = document.createElement('a');
@@ -102,7 +108,7 @@
     });
 </script>
 
-<div class="flex h-screen bg-zinc-950 text-white overflow-hidden">
+<div class="flex h-full bg-zinc-950 text-white overflow-hidden">
     <!-- Sidebar -->
     <div class="w-80 border-r border-zinc-800 bg-zinc-900 flex flex-col shrink-0">
         <div class="p-4 border-b border-zinc-800 shrink-0">
@@ -111,21 +117,21 @@
                 <span>&larr;</span> Back to Chat
             </a>
         </div>
-        
+
         <!-- Versions List (Accordion Style) -->
         <div class="flex-1 overflow-y-auto">
             <ul class="flex flex-col">
-                {#each data.specs as spec}
+                {#each data.specs as spec (spec.id)}
                     {@const isSelected = selectedSpecId === spec.id}
 
                     <li class="border-b border-zinc-800/50">
                         <!-- Version Header -->
                         <div class={`w-full text-left px-4 py-3 hover:bg-zinc-800 transition group flex flex-col gap-1 relative
                             ${isSelected ? 'bg-zinc-800' : ''}`}>
-                            
+
                             <!-- Main Clickable Area -->
-                             <button 
-                                onclick={() => { 
+                             <button
+                                onclick={() => {
                                     selectedSpecId = spec.id;
                                     // Auto-selection logic is handled in the effect in script
                                 }}
@@ -135,7 +141,7 @@
 
                             <div class="flex justify-between items-center w-full z-10 pointer-events-none">
                                 <span class="font-medium text-sm text-zinc-200">
-                                    Version {new Date(spec.createdAt).toLocaleDateString()} 
+                                    Version {new Date(spec.createdAt).toLocaleDateString()}
                                     <span class="text-zinc-500 text-xs ml-1">{new Date(spec.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                                 </span>
                                 {#if spec.status === 'PENDING' || spec.status === 'GENERATING'}
@@ -149,7 +155,7 @@
                                 <div class="flex items-center gap-2">
                                      <span class="text-xs text-zinc-600">{(spec.content.length / 1024).toFixed(1)} KB</span>
                                      {#if spec.status === 'COMPLETED'}
-                                        <button 
+                                        <button
                                             onclick={(e) => downloadSpec(spec, e)}
                                             class="pointer-events-auto p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white transition"
                                             title="Download ZIP"
@@ -167,16 +173,28 @@
                         {#if isSelected && parsedContent}
                             {#if parsedContent.type === 'multi'}
                                 <ul class="bg-zinc-950/30 py-1">
-                                    {#each parsedContent.files as file}
+
+
+                                    {#each parsedContent.files as file, index}
+                                        {@const isLocked = data.user.tier === 'DISCOVER' && index > 2}
                                         <li>
                                             <button
-                                                onclick={(e) => { e.stopPropagation(); selectedFileName = file.name; }}
+                                                disabled={isLocked}
+                                                onclick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (!isLocked) selectedFileName = file.name;
+                                                }}
                                                 class={`w-full text-left pl-8 pr-4 py-2 text-sm transition flex items-center gap-2
-                                                ${selectedFileName === file.name ? 'text-indigo-400 bg-indigo-500/10 border-r-2 border-indigo-500' : 'text-zinc-400 hover:text-zinc-300 hover:bg-white/5'}`}>
+                                                ${selectedFileName === file.name ? 'text-indigo-400 bg-indigo-500/10 border-r-2 border-indigo-500' : 'text-zinc-400 hover:text-zinc-300 hover:bg-white/5'}
+                                                ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}>
                                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3 shrink-0 opacity-70">
-                                                    <path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 003 3.5v13A1.5 1.5 0 004.5 18h11a1.5 1.5 0 001.5-1.5V6.621a1.5 1.5 0 00-.44-1.06l-4.12-4.122A1.5 1.5 0 0011.378 2H4.5zm2.25 8.5a.75.75 0 000 1.5h6.5a.75.75 0 000-1.5h-6.5zm0 3a.75.75 0 000 1.5h6.5a.75.75 0 000-1.5h-6.5z" clip-rule="evenodd" />
+                                                    {#if isLocked}
+                                                        <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clip-rule="evenodd" />
+                                                    {:else}
+                                                        <path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 003 3.5v13A1.5 1.5 0 004.5 18h11a1.5 1.5 0 001.5-1.5V6.621a1.5 1.5 0 00-.44-1.06l-4.12-4.122A1.5 1.5 0 0011.378 2H4.5zm2.25 8.5a.75.75 0 000 1.5h6.5a.75.75 0 000-1.5h-6.5zm0 3a.75.75 0 000 1.5h6.5a.75.75 0 000-1.5h-6.5z" clip-rule="evenodd" />
+                                                    {/if}
                                                 </svg>
-                                                <span class="truncate">{file.name}</span>
+                                                <span class="truncate">{file.name} {isLocked ? '(Locked)' : ''}</span>
                                             </button>
                                         </li>
                                     {/each}

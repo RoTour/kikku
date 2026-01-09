@@ -81,7 +81,7 @@
     }
 </script>
 
-<div class="fixed inset-0 flex flex-col bg-zinc-950 text-white">
+<div class="flex flex-col h-full w-full bg-zinc-950 text-white">
     <!-- Header -->
     <header class="h-16 border-b border-zinc-800 flex items-center px-6 bg-zinc-900 justify-between">
         <div>

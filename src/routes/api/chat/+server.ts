@@ -15,9 +15,16 @@ const requestSchema = z.object({
 
 export const POST = async ({ request, locals }) => {
     // 1. Auth Check
-    if (!locals.session) {
+    if (!locals.session || !locals.user) {
         throw error(401, 'Unauthorized');
     }
+
+    // Fetch fresh user data including limits
+    const user = await prisma.user.findUnique({
+        where: { id: locals.user.id }
+    });
+
+    if (!user) throw error(401, 'User not found');
 
     // 2. Parse Request
     const json = await request.json();
@@ -29,6 +36,23 @@ export const POST = async ({ request, locals }) => {
 
     // 3. Get/Create Conversation
     let conversationId = await chatRepo.findLatestConversationId(projectId);
+
+    // [LIMIT CHECK]
+    if (user.tier === 'DISCOVER') {
+        if (conversationId) {
+             const history = await chatRepo.getHistory(conversationId);
+             // Limit to 40 messages (20 turns)
+             if (history.length >= 40) {
+                 throw error(403, 'Free tier limit reached (20 turns max). Please upgrade to continue.');
+             }
+        }
+    } else {
+        // Paid tiers: Check for positive balance
+        if (user.tokenBalance <= 0) {
+            throw error(403, 'Insufficient credits. Please top up your balance.');
+        }
+    }
+
     if (!conversationId) {
         conversationId = await chatRepo.createConversation(projectId);
     }
