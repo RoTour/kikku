@@ -68,6 +68,7 @@
 		"@types/pg": "^8.16.0",
 		"ai": "^6.0.24",
 		"better-auth": "^1.4.10",
+		"jszip": "^3.10.1",
 		"katex": "^0.16.27",
 		"marked": "^17.0.1",
 		"marked-katex-extension": "^5.1.6",

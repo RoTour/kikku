@@ -1,6 +1,7 @@
 <script lang="ts">
     import { invalidateAll } from '$app/navigation';
     import { page } from '$app/state';
+    import JSZip from 'jszip';
     import { marked } from 'marked';
     import { onMount } from 'svelte';
     
@@ -58,6 +59,37 @@
         return marked.parse(content);
     }
 
+    async function downloadSpec(spec: any, event: MouseEvent) {
+        event.stopPropagation();
+        const zip = new JSZip();
+        
+        try {
+            if (spec.content.trim().startsWith('[')) {
+                const files = JSON.parse(spec.content);
+                if (Array.isArray(files)) {
+                    files.forEach(f => {
+                         zip.file(f.name, f.content);
+                    });
+                } else {
+                     zip.file('spec.md', spec.content);
+                }
+            } else {
+                zip.file('spec.md', spec.content);
+            }
+            
+            const content = await zip.generateAsync({ type: 'blob' });
+            const url = window.URL.createObjectURL(content);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `spec-${spec.createdAt.split('T')[0]}.zip`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error('Failed to download zip', e);
+            alert('Failed to generate zip file');
+        }
+    }
+
     // Poll if latest spec is pending
     onMount(() => {
         const interval = setInterval(() => {
@@ -88,14 +120,20 @@
 
                     <li class="border-b border-zinc-800/50">
                         <!-- Version Header -->
-                        <button 
-                            onclick={() => { 
-                                selectedSpecId = spec.id;
-                                // Auto-selection logic is handled in the effect in script
-                            }}
-                            class={`w-full text-left px-4 py-3 hover:bg-zinc-800 transition group flex flex-col gap-1
+                        <div class={`w-full text-left px-4 py-3 hover:bg-zinc-800 transition group flex flex-col gap-1 relative
                             ${isSelected ? 'bg-zinc-800' : ''}`}>
-                            <div class="flex justify-between items-center w-full">
+                            
+                            <!-- Main Clickable Area -->
+                             <button 
+                                onclick={() => { 
+                                    selectedSpecId = spec.id;
+                                    // Auto-selection logic is handled in the effect in script
+                                }}
+                                class="absolute inset-0 w-full h-full z-0 cursor-pointer text-left focus:outline-none"
+                                aria-label="Select Version"
+                            ></button>
+
+                            <div class="flex justify-between items-center w-full z-10 pointer-events-none">
                                 <span class="font-medium text-sm text-zinc-200">
                                     Version {new Date(spec.createdAt).toLocaleDateString()} 
                                     <span class="text-zinc-500 text-xs ml-1">{new Date(spec.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
@@ -106,11 +144,24 @@
                                     <span class="w-2 h-2 bg-red-500 rounded-full"></span>
                                 {/if}
                             </div>
-                            <div class="flex justify-between items-center">
+                            <div class="flex justify-between items-center z-10 pointer-events-none">
                                 <span class="text-[10px] uppercase tracking-wider font-semibold text-zinc-500">{spec.status}</span>
-                                <span class="text-xs text-zinc-600">{(spec.content.length / 1024).toFixed(1)} KB</span>
+                                <div class="flex items-center gap-2">
+                                     <span class="text-xs text-zinc-600">{(spec.content.length / 1024).toFixed(1)} KB</span>
+                                     {#if spec.status === 'COMPLETED'}
+                                        <button 
+                                            onclick={(e) => downloadSpec(spec, e)}
+                                            class="pointer-events-auto p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white transition"
+                                            title="Download ZIP"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                            </svg>
+                                        </button>
+                                     {/if}
+                                </div>
                             </div>
-                        </button>
+                        </div>
 
                         <!-- Nested Files List (Visible if spec is selected) -->
                         {#if isSelected && parsedContent}
