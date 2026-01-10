@@ -30,13 +30,13 @@
             cta: 'Buy One-Time',
             action: async () => {
                 await authClient.polar.checkout({
-                    productSlug: 'Hobbyist'
+                    slug: 'Hobbyist'
                 });
             },
             ctaSub: 'Subscribe (€4/mo)',
             actionSub: async () => {
                  await authClient.polar.checkout({
-                    productSlug: 'Hobbyist-Subscription'
+                    slug: 'Hobbyist-Subscription'
                 });
             },
             highlight: true
@@ -55,13 +55,13 @@
             cta: 'Buy One-Time',
              action: async () => {
                  await authClient.polar.checkout({
-                    productSlug: 'Pro'
+                    slug: 'Pro'
                 });
             },
             ctaSub: 'Subscribe (€16/mo)',
              actionSub: async () => {
                  await authClient.polar.checkout({
-                    productSlug: 'Pro-Subscription'
+                    slug: 'Pro-Subscription'
                 });
             },
             highlight: false

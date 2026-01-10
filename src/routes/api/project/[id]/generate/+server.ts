@@ -25,8 +25,9 @@ export const POST = async ({ params, locals }) => {
 
     // 3. Push to SQS
     try {
+        console.log('DEBUG: SQS_QUEUE_URL in app:', env.SQS_QUEUE_URL);
         if (env.SQS_QUEUE_URL) {
-            await sqsClient.send(new SendMessageCommand({
+            const sendRes = await sqsClient.send(new SendMessageCommand({
                 QueueUrl: env.SQS_QUEUE_URL,
                 MessageBody: JSON.stringify({
                     specId: spec.id,
@@ -34,6 +35,7 @@ export const POST = async ({ params, locals }) => {
                     conversationId
                 })
             }));
+            console.log('DEBUG: Message sent to SQS. ID:', sendRes.MessageId);
         } else {
              // Fallback for local dev without SQS?
              // For now, we assume SQS is configured or we rely on the worker loop if it was in-memory (it's not).

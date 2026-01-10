@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import '../app.css';
 	
-	let { children } = $props();
+	let { children, data } = $props();
 
     // Simple active link helper
     function isActive(path: string) {
@@ -30,6 +30,18 @@
         </div>
 
         <div class="flex items-center gap-4">
+             {#if data?.user}
+                <div class="flex items-center gap-2 mr-4">
+                    <span class="text-xs font-medium text-zinc-500 uppercase tracking-widest bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded">
+                        {data.user.tier}
+                    </span>
+                    {#if data.user.tier !== 'DISCOVER'}
+                        <span class="text-sm text-zinc-400">
+                            {data.user.tokenBalance?.toLocaleString()} Tokens
+                        </span>
+                    {/if}
+                </div>
+             {/if}
              <!-- User Profile / Logout Could go here -->
              <a href="/logout" class="text-sm text-zinc-500 hover:text-zinc-300">Sign out</a>
         </div>

@@ -43,8 +43,8 @@ const SpecSchema = z.object({
 });
 
 interface GenerateResult {
-    content: string;
-    usage: { promptTokens: number; completionTokens: number; totalTokens: number };
+	content: string;
+	usage: { promptTokens: number; completionTokens: number; totalTokens: number };
 }
 
 async function generateSpec(prompt: string): Promise<GenerateResult> {
@@ -69,13 +69,14 @@ async function generateSpec(prompt: string): Promise<GenerateResult> {
 			]
 		};
 		return {
-            content: JSON.stringify(mockObj.files),
-            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
-        };
+			content: JSON.stringify(mockObj.files),
+			usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+		};
 	}
 
 	const apiKey = process.env.OPENROUTER_API_KEY;
-	const modelId = process.env.LLM_SPEC_MODEL_PROD || 'google/gemini-pro-1.5';
+	const modelId =
+		process.env.LLM_SPEC_MODEL_DEV || process.env.LLM_SPEC_MODEL_PROD || 'google/gemini-pro-1.5';
 
 	if (!apiKey) throw new Error('Missing OPENROUTER_API_KEY');
 
@@ -93,15 +94,15 @@ async function generateSpec(prompt: string): Promise<GenerateResult> {
 			prompt: prompt
 		});
 
-        const usage = result.usage;
+		const usage = result.usage;
 		return {
-            content: JSON.stringify(result.object.files),
-            usage: { 
-                promptTokens: usage.promptTokens || 0, 
-                completionTokens: usage.completionTokens || 0, 
-                totalTokens: usage.totalTokens || 0
-            }
-        };
+			content: JSON.stringify(result.object.files),
+			usage: {
+				promptTokens: usage.promptTokens || 0,
+				completionTokens: usage.completionTokens || 0,
+				totalTokens: usage.totalTokens || 0
+			}
+		};
 	} catch (error) {
 		console.error('SDK Generation Error:', error);
 		throw error;
@@ -118,28 +119,27 @@ async function processMessage(message: any) {
 	try {
 		console.log(`   Project: ${projectId}, Spec: ${specId}`);
 
-        // [NEW] 0. Check User Balance & Project ownership
-        const project = await prisma.project.findUnique({
-             where: { id: projectId },
-             include: { user: true }
-        });
+		// [NEW] 0. Check User Balance & Project ownership
+		const project = await prisma.project.findUnique({
+			where: { id: projectId },
+			include: { user: true }
+		});
 
-        if (!project || !project.user) {
-             console.error('❌ Project or User not found');
-             return;
-        }
+		if (!project || !project.user) {
+			console.error('❌ Project or User not found');
+			return;
+		}
 
-        const user = project.user;
+		const user = project.user;
 
-        // Balance Check for Paid Tiers
-        if (user.tier !== 'DISCOVER' && user.tokenBalance <= 0) {
-             // Mark spec as FAILED with specific reason?
-             // Currently SpecStatus doesn't have reasons.
-             console.error('❌ Insufficient tokens for user', user.id);
-             // We should probably update the spec to FAILED.
-             throw new Error('Insufficient tokens');
-        }
-
+		// Balance Check for Paid Tiers
+		if (user.tier !== 'DISCOVER' && user.tokenBalance <= 0) {
+			// Mark spec as FAILED with specific reason?
+			// Currently SpecStatus doesn't have reasons.
+			console.error('❌ Insufficient tokens for user', user.id);
+			// We should probably update the spec to FAILED.
+			throw new Error('Insufficient tokens');
+		}
 
 		// 1. Update Status to Generating
 		const existingSpec = await specRepo.findLatestByProjectId(projectId);
@@ -219,14 +219,14 @@ async function processMessage(message: any) {
 		const { content: jsonContent, usage } = await generateSpec(prompt); // [MODIFIED] Destructure result
 		console.log('   ✅ Content generated (' + jsonContent.length + ' bytes). Usage:', usage);
 
-        // [NEW] Deduct Tokens
-        if (usage.totalTokens > 0) {
-             await prisma.user.update({
-                 where: { id: user.id },
-                 data: { tokenBalance: { decrement: usage.totalTokens } }
-             });
-             console.log(`   💸 Deducted ${usage.totalTokens} tokens from User ${user.id}`);
-        }
+		// [NEW] Deduct Tokens
+		if (usage.totalTokens > 0) {
+			await prisma.user.update({
+				where: { id: user.id },
+				data: { tokenBalance: { decrement: usage.totalTokens } }
+			});
+			console.log(`   💸 Deducted ${usage.totalTokens} tokens from User ${user.id}`);
+		}
 
 		// 4. Save Completed
 		const completedSpec = SpecVersion.rehydrate(
@@ -260,8 +260,16 @@ async function processMessage(message: any) {
 }
 
 async function main() {
+	console.log('------------------------------------------------');
+	console.log('Worker Starting...');
+	console.log('AWS_REGION:', process.env.AWS_REGION);
+	console.log('SQS_QUEUE_URL:', QUEUE_URL);
+	console.log('AWS_ACCESS_KEY_ID present:', !!process.env.AWS_ACCESS_KEY_ID);
+	console.log('------------------------------------------------');
+
 	console.log('Worker started. Listening on', QUEUE_URL);
 	while (true) {
+		// console.log('Polling SQS...');
 		try {
 			const result = await sqs.send(
 				new ReceiveMessageCommand({
